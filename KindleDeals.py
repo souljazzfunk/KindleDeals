@@ -71,18 +71,18 @@ url = 'https://www.amazon.co.jp/b?ie=UTF8&node=3251934051'
 my = AmazonLogin()
 user_name = my.user_name
 passwd = my.passwd
-
-parser = argparse.ArgumentParser(description='Toggle headless mode for Selenium')
-parser.add_argument('--headed', action='store_true', help='Run Selenium in headed mode')
-args = parser.parse_args()
+print(user_name, passwd)
+# parser = argparse.ArgumentParser(description='Toggle headless mode for Selenium')
+# parser.add_argument('--headed', action='store_true', help='Run Selenium in headed mode')
+# args = parser.parse_args()
 
 chrome_service = Service(ChromeDriverManager().install())
 options = Options()
 options.add_argument('--window-size=1920,1080')
 options.add_argument('--user-agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"')
 
-if not args.headed:
-    options.add_argument("--headless")
+# if not args.headed:
+    # options.add_argument("--headless")
 
 driver = webdriver.Chrome(service=chrome_service, options=options)
 
