@@ -6,9 +6,10 @@ from webdriver_manager.chrome import ChromeDriverManager
 import time
 import tweepy
 import sys
-sys.path.append('..')
+import os
+sys.path.append(os.environ.get('API_KEYS'))
 from api_keys import TwitterApiKeys, AmazonLogin
-import argparse
+# import argparse
 
 def login(email, passwd):
     login_btn = driver.find_element(By.XPATH, '//div[@id="nav-signin-tooltip"]/a/span')
@@ -71,7 +72,7 @@ url = 'https://www.amazon.co.jp/b?ie=UTF8&node=3251934051'
 my = AmazonLogin()
 user_name = my.user_name
 passwd = my.passwd
-print(user_name, passwd)
+
 # parser = argparse.ArgumentParser(description='Toggle headless mode for Selenium')
 # parser.add_argument('--headed', action='store_true', help='Run Selenium in headed mode')
 # args = parser.parse_args()
@@ -99,6 +100,7 @@ tw = tweepy.Client(
     access_token=my.access_token,
     access_token_secret=my.access_token_secret
 )
+
 for i in reversed(range(3)):
     header = f"【本日限定のKindleセール {i+1}/3】\n"
     desc = bk_info[i][2][:int((280 - 4 - len(bk_info[i][0]) - len((header + bk_info[i][1]).encode('utf-8'))/3*2)/2 - 8)] + "…"
