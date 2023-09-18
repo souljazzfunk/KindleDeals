@@ -5,6 +5,8 @@ from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 import time
 import tweepy
+import sys
+sys.path.append('..')
 from api_keys import TwitterApiKeys, AmazonLogin
 import argparse
 
