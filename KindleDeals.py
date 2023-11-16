@@ -1,7 +1,10 @@
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
+from selenium.common.exceptions import TimeoutException
 from selenium.common.exceptions import NoSuchElementException
 from webdriver_manager.chrome import ChromeDriverManager
 import time
@@ -27,6 +30,12 @@ class AmazonScraper:
         self.driver.find_element(By.ID, "continue").submit()
         self.driver.find_element(By.ID, "ap_password").send_keys(password)
         self.driver.find_element(By.ID, "signInSubmit").submit()
+
+        try:
+            WebDriverWait(self.driver, 60).until(EC.url_to_be(url))
+            print("Login successful: ", self.driver.current_url.title)
+        except TimeoutException:
+            print("Timed out waiting for URL redirection. Current URL:", self.driver.current_url)
 
     def close(self):
         self.driver.quit()
