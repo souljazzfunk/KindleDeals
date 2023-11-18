@@ -7,10 +7,12 @@ from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
 from selenium.common.exceptions import NoSuchElementException
 from webdriver_manager.chrome import ChromeDriverManager
+from urllib.parse import urlparse
 import time
 import tweepy
 import sys
 import os
+
 sys.path.append(os.environ.get('API_KEYS'))
 from api_keys import TwitterApiKeys, AmazonLogin
 
@@ -23,7 +25,8 @@ class AmazonScraper:
         self.driver = webdriver.Chrome(service=Service(ChromeDriverManager().install(), log_path="chromedriver.log"), options=options)
 
     def login(self, email, password):
-        url = 'https://www.amazon.co.jp/b?ie=UTF8&node=3251934051'
+        # url = 'https://www.amazon.co.jp/b?ie=UTF8&node=3251934051'
+        url = 'https://www.amazon.co.jp/hko/deals'
         self.driver.get(url)
         self.driver.find_element(By.XPATH, '//div[@id="nav-signin-tooltip"]/a/span').click()
         self.driver.find_element(By.ID, "ap_email").send_keys(email)
@@ -31,14 +34,32 @@ class AmazonScraper:
         self.driver.find_element(By.ID, "ap_password").send_keys(password)
         self.driver.find_element(By.ID, "signInSubmit").submit()
 
+        def check_url(driver):
+            current_url = urlparse(driver.current_url)
+            base_current_url = f"{current_url.scheme}://{current_url.netloc}{current_url.path}"
+            return base_current_url == url
+
         try:
-            WebDriverWait(self.driver, 60).until(EC.url_to_be(url))
+            WebDriverWait(self.driver, 60).until(check_url)
             print("Login successful: ", self.driver.current_url.title)
         except TimeoutException:
             print("Timed out waiting for URL redirection. Current URL:", self.driver.current_url)
+            self.driver.quit()
+            sys.exit(1)
 
     def close(self):
         self.driver.quit()
+
+    def get_book_element(self, index):
+        carousel_ids = ['anonCarousel2', 'anonCarousel1']
+        for carousel_id in carousel_ids:
+            try:
+                xpath = f'//div[@id="{carousel_id}"]/ol/li[{index + 1}]/a/div/img'
+                book = self.driver.find_element(By.XPATH, xpath)
+                return book
+            except NoSuchElementException:
+                continue  # Try the next carousel ID if the current one fails
+        raise NoSuchElementException(f"None of the carousel elements found for index {index}")
 
     # refactor this!
     def get_book_info(self):
@@ -57,7 +78,7 @@ class AmazonScraper:
         xpath_ku = '//span[@class="a-size-base a-color-secondary ku-promo-message"]'
         info = [[''] * 3 for _ in range(3)]
         for i in range(3):
-            book = self.driver.find_element(By.XPATH, '//div[@id="anonCarousel1"]/ol/li[' + str(i + 1) + ']/a/div/img')
+            book = self.get_book_element(i)
             book.click()
             print(self.driver.title)
             retry = 0
