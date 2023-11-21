@@ -51,15 +51,14 @@ class AmazonScraper:
         self.driver.quit()
 
     def get_book_element(self, index):
-        carousel_ids = ['anonCarousel2', 'anonCarousel1']
-        for carousel_id in carousel_ids:
-            try:
-                xpath = f'//div[@id="{carousel_id}"]/ol/li[{index + 1}]/a/div/img'
-                book = self.driver.find_element(By.XPATH, xpath)
-                return book
-            except NoSuchElementException:
-                continue  # Try the next carousel ID if the current one fails
-        raise NoSuchElementException(f"None of the carousel elements found for index {index}")
+        try:
+            xpath = f"//h2[contains(text(), 'Kindle日替わりセール')]/following::ol[1]/li[{index + 1}]"
+            book = self.driver.find_element(By.XPATH, xpath)
+            return book
+        except NoSuchElementException:
+            print("Failed to locate the Daily Sale element at:", self.driver.current_url)
+            self.driver.quit()
+            sys.exit(1)
 
     # refactor this!
     def get_book_info(self):
