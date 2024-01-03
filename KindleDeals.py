@@ -25,7 +25,6 @@ class AmazonScraper:
         self.driver = webdriver.Chrome(service=Service(ChromeDriverManager().install(), log_path="chromedriver.log"), options=options)
 
     def login(self, email, password):
-        # url = 'https://www.amazon.co.jp/b?ie=UTF8&node=3251934051'
         url = 'https://www.amazon.co.jp/hko/deals'
         self.driver.get(url)
         self.driver.find_element(By.XPATH, '//div[@id="nav-signin-tooltip"]/a/span').click()
@@ -65,16 +64,12 @@ class AmazonScraper:
         # Constants for XPaths and retry settings
         XPATH_URL = '//textarea[@id="amzn-ss-text-shortlink-textarea"]'
         XPATH_TITLE = '//span[@id="productTitle"]'
-        XPATH_DESC = """//div[@class="a-expander-content a-expander-partial-collapse-content"]/span[not(contains(text(),'※この商品はタブレット'))][1]"""
+        # XPATH_DESC = """//div[@class="a-expander-content a-expander-partial-collapse-content"]/span[not(contains(text(),'※この商品はタブレット'))][1]"""
+        XPATH_DESC = """//*[@id="bookDescription_feature_div"]/div/div[1]/span[not(contains(text(),'※この商品は'))]"""
         XPATH_KU = '//span[@class="a-size-base a-color-secondary ku-promo-message"]'
         MAX_RETRIES = 10
         RETRY_WAIT_TIME = 5
 
-        # 0:URL, 1:Title, 2:Description
-        xpath0 = '//textarea[@id="amzn-ss-text-shortlink-textarea"]'
-        xpath1 = '//span[@id="productTitle"]'
-        xpath2 = """//div[@class="a-expander-content a-expander-partial-collapse-content"]/span[not(contains(text(),'※この商品はタブレット'))][1]"""
-        xpath_ku = '//span[@class="a-size-base a-color-secondary ku-promo-message"]'
         info = [[''] * 3 for _ in range(3)]
         for i in range(3):
             book = self.get_book_element(i)
@@ -85,28 +80,28 @@ class AmazonScraper:
                 bk_btn = self.driver.find_element(By.XPATH, '//li[@id="amzn-ss-text-link"]/span')
                 bk_btn.click()
                 time.sleep(1)
-                info[i][0] = self.driver.find_element(By.XPATH, xpath0).text
+                info[i][0] = self.driver.find_element(By.XPATH, XPATH_URL).text
                 if info[i][0] != '':
                     break
-                elif retry < 10:
+                elif retry < MAX_RETRIES:
                     close_btn = self.driver.find_element(By.XPATH, '//button[@data-action="a-popover-close"]')
                     close_btn.click()
                     retry += 1
                     print('retrying', retry)
-                    time.sleep(5)
+                    time.sleep(RETRY_WAIT_TIME)
                 else:
                     print('ERROR: link creation failed')
                     self.driver.quit()
                     exit(1)
-            info[i][1] = self.driver.find_element(By.XPATH, xpath1).text
+            info[i][1] = self.driver.find_element(By.XPATH, XPATH_TITLE).text
             try:
-                ku = self.driver.find_element(By.XPATH, xpath_ku)
+                ku = self.driver.find_element(By.XPATH, XPATH_KU)
                 if ku:
                     info[i][2] = '【Kindle Unlimited対象】'
             except NoSuchElementException:
                 # print('Not included in Kindle Unlimited')
                 pass
-            info[i][2] += self.driver.find_element(By.XPATH, xpath2).get_attribute("innerText")
+            info[i][2] += self.driver.find_element(By.XPATH, XPATH_DESC).get_attribute("innerText")
             for j in range(3):
                 if info[i][j] == '':
                     print(f"ERROR: info[{i}][{j}] empty")
