@@ -51,12 +51,18 @@ class AmazonScraper:
             WebDriverWait(self.driver, 60).until(check_url)
             print("Login successful: ", self.driver.title)
         except TimeoutException:
-            print("Timed out waiting for URL redirection. Current URL:", self.driver.current_url)
-            self.driver.quit()
-            sys.exit(1)
+            self.exit_with_error("Timed out waiting for URL redirection. Current URL:", self.driver.current_url)
 
     def close(self):
         self.driver.quit()
+
+
+    def exit_with_error(self, *args):
+        msg = ' '.join(map(str, args))
+        print(msg)
+        self.driver.quit()
+        sys.exit(1)
+
 
     def get_book_element(self, index):
         try:
@@ -64,79 +70,102 @@ class AmazonScraper:
             book = self.driver.find_element(By.XPATH, xpath)
             return book
         except NoSuchElementException:
-            print("Failed to locate the Daily Sale element at:", self.driver.current_url)
-            self.driver.quit()
-            sys.exit(1)
+            self.exit_with_error("Failed to locate the Daily Sale element at:", self.driver.current_url)
 
-    # refactor this!
+
     def get_book_info(self):
         info = [[''] * 3 for _ in range(3)]
         for i in range(3):
-            book = self.get_book_element(i)
-            book.click()
-            print(self.driver.title)
-
-            try:
-                ku = self.driver.find_element(By.XPATH, XPATH_KU)
-                if ku:
-                    info[i][2] = '【Kindle Unlimited対象】'
-            except NoSuchElementException:
-                # print('Not included in Kindle Unlimited')
-                pass
-
-            try:
-                # Find <span> elements that do NOT contain '※'
-                print("Retrieving the description: first attempt")
-                info[i][2] += self.driver.find_element(By.XPATH, XPATH_DESC_DEFAULT).text
-            except:
-                # Retrieve all the <span> elements and filter lines starting with '※'
-                try:
-                    print("Retrieving the description: second attempt")
-                    span_elements = self.driver.find_elements(By.XPATH, XPATH_DESC_SPAN)
-                    filtered_lines = []
-                    for span in span_elements:
-                        inner_html = span.text
-                        lines = inner_html.split('<br>')
-                        for line in lines:
-                            if not re.match(r'^\s*※|^\s*$', line):
-                                filtered_line = re.sub('<[^<]+?>', '', line).strip()
-                                filtered_lines.append(filtered_line)
-
-                    info[i][2] += '\n'.join(filtered_lines)
-                except NoSuchElementException:
-                    print(f"ERROR: Obtaining description failed.\n{self.driver.current_url}")
-                    self.driver.quit()
-                    exit(1)
-
-            retry = 0
-            while True:
-                bk_btn = self.driver.find_element(By.XPATH, '//li[@id="amzn-ss-text-link"]/span')
-                bk_btn.click()
-                time.sleep(1)
-                info[i][0] = self.driver.find_element(By.XPATH, XPATH_URL).text
-                if info[i][0] != '':
-                    break
-                elif retry < MAX_RETRIES:
-                    close_btn = self.driver.find_element(By.XPATH, '//button[@data-action="a-popover-close"]')
-                    close_btn.click()
-                    retry += 1
-                    print('retrying', retry)
-                    time.sleep(RETRY_WAIT_TIME)
-                else:
-                    print('ERROR: link creation failed')
-                    self.driver.quit()
-                    exit(1)
-            info[i][1] = self.driver.find_element(By.XPATH, XPATH_TITLE).text
-
-            for j in range(3):
-                if info[i][j] == '':
-                    print(f"ERROR: info[{i}][{j}] empty\n{self.driver.current_url}")
-                    self.driver.quit()
-                    exit(1)
-
-            self.driver.back()
-
+            self.process_book(i, info)
         return info
+
+
+    def process_book(self, index, info):
+        book = self.get_book_element(index)
+        book.click()
+        print(self.driver.title)
+        time.sleep(5)
+        self.get_kindle_unlimited_status(index, info)
+        self.get_book_description(index, info)
+        self.get_book_url_and_title(index, info)
+        self.verify_book_info(index, info)
+        self.driver.back()        
+
+
+    def get_kindle_unlimited_status(self, index, info):
+        try:
+            ku = self.driver.find_element(By.XPATH, XPATH_KU)
+            if ku:
+                info[index][2] = '【Kindle Unlimited対象】'
+        except NoSuchElementException:
+            pass
+
+
+    def get_book_description(self, index, info):
+        try:
+            # Find <span> elements that do NOT contain '※'
+            span_elements = self.driver.find_elements(By.XPATH, XPATH_DESC_DEFAULT)
+            description = "\n".join([span.text for span in span_elements])
+            info[index][2] += description
+        except NoSuchElementException:
+            self.retry_book_description(index, info)
+
+
+    def retry_book_description(self, index, info):
+        try:
+            print("Retrieving the description: second attempt")
+            info[index][2] += self.get_filtered_description()
+        except NoSuchElementException:
+            self.exit_with_error(f"ERROR: Obtaining description failed.\n{self.driver.current_url}")
+
+
+    # Retrieve all the <span> elements and filter lines starting with '※'
+    def get_filtered_description(self):
+        span_elements = self.driver.find_elements(By.XPATH, XPATH_DESC_SPAN)
+        filtered_lines = []
+        for span in span_elements:
+            inner_html = span.text
+            lines = inner_html.split('<br>')
+            for line in lines:
+                if not re.match(r'^\s*※|^\s*$', line):
+                    filtered_line = re.sub('<[^<]+?>', '', line).strip()
+                    filtered_lines.append(filtered_line)
+        return '\n'.join(filtered_lines)
+
+
+    def get_book_url_and_title(self, index, info):
+        self.get_book_url(index, info)
+        info[index][1] = self.driver.find_element(By.XPATH, XPATH_TITLE).text
+
+
+    def get_book_url(self, index, info):
+        retry = 0
+        while True:
+            bk_btn = self.driver.find_element(By.XPATH, '//li[@id="amzn-ss-text-link"]/span')
+            bk_btn.click()
+            time.sleep(1)
+            info[index][0] = self.driver.find_element(By.XPATH, XPATH_URL).text
+            if info[index][0] != '':
+                break
+            elif retry < MAX_RETRIES:
+                self.close_popover_modal()
+                retry += 1
+            else:
+                self.exit_with_error('ERROR: link creation failed')
+
+
+    def close_popover_modal(self):
+        close_btn = self.driver.find_element(By.XPATH, '//button[@data-action="a-popover-close"]')
+        close_btn.click()
+        print('retrying')
+        time.sleep(RETRY_WAIT_TIME)
+                
+
+    def verify_book_info(self, index, info):
+        for j in range(3):
+            if info[index][j] == '':
+                self.exit_with_error(f"ERROR: info[{index}][{j}] empty\n{self.driver.current_url}")
+
 
 class TwitterClient:
     def __init__(self, api_keys):
@@ -212,7 +241,7 @@ def main():
 
     for i in reversed(range(3)):
         body = generate_tweet_text(book_info, i)
-        # twitter_client.post_tweet(body)
+        twitter_client.post_tweet(body)
         if i > 0:
             time.sleep(1)
 
