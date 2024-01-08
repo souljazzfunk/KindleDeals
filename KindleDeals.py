@@ -12,9 +12,18 @@ import time
 import tweepy
 import sys
 import os
+import re
 
 sys.path.append(os.environ.get('API_KEYS'))
 from api_keys import TwitterApiKeys, AmazonLogin
+
+XPATH_URL = '//textarea[@id="amzn-ss-text-shortlink-textarea"]'
+XPATH_TITLE = '//span[@id="productTitle"]'
+XPATH_DESC_DEFAULT = """//*[@id="bookDescription_feature_div"]/div/div[1]/span[not(contains(text(),'※'))]"""
+XPATH_DESC_SPAN = '//*[@id="bookDescription_feature_div"]/div/div[1]/span'
+XPATH_KU = '//span[@class="a-size-base a-color-secondary ku-promo-message"]'
+MAX_RETRIES = 10
+RETRY_WAIT_TIME = 5
 
 class AmazonScraper:
     def __init__(self):
@@ -40,7 +49,7 @@ class AmazonScraper:
 
         try:
             WebDriverWait(self.driver, 60).until(check_url)
-            print("Login successful: ", self.driver.current_url.title)
+            print("Login successful: ", self.driver.title)
         except TimeoutException:
             print("Timed out waiting for URL redirection. Current URL:", self.driver.current_url)
             self.driver.quit()
@@ -61,20 +70,44 @@ class AmazonScraper:
 
     # refactor this!
     def get_book_info(self):
-        # Constants for XPaths and retry settings
-        XPATH_URL = '//textarea[@id="amzn-ss-text-shortlink-textarea"]'
-        XPATH_TITLE = '//span[@id="productTitle"]'
-        # XPATH_DESC = """//div[@class="a-expander-content a-expander-partial-collapse-content"]/span[not(contains(text(),'※この商品はタブレット'))][1]"""
-        XPATH_DESC = """//*[@id="bookDescription_feature_div"]/div/div[1]/span[not(contains(text(),'※この商品は'))]"""
-        XPATH_KU = '//span[@class="a-size-base a-color-secondary ku-promo-message"]'
-        MAX_RETRIES = 10
-        RETRY_WAIT_TIME = 5
-
         info = [[''] * 3 for _ in range(3)]
         for i in range(3):
             book = self.get_book_element(i)
             book.click()
             print(self.driver.title)
+
+            try:
+                ku = self.driver.find_element(By.XPATH, XPATH_KU)
+                if ku:
+                    info[i][2] = '【Kindle Unlimited対象】'
+            except NoSuchElementException:
+                # print('Not included in Kindle Unlimited')
+                pass
+
+            try:
+                # Find <span> elements that do NOT contain '※'
+                print("Retrieving the description: first attempt")
+                info[i][2] += self.driver.find_element(By.XPATH, XPATH_DESC_DEFAULT).text
+            except:
+                # Retrieve all the <span> elements and filter lines starting with '※'
+                try:
+                    print("Retrieving the description: second attempt")
+                    span_elements = self.driver.find_elements(By.XPATH, XPATH_DESC_SPAN)
+                    filtered_lines = []
+                    for span in span_elements:
+                        inner_html = span.text
+                        lines = inner_html.split('<br>')
+                        for line in lines:
+                            if not re.match(r'^\s*※|^\s*$', line):
+                                filtered_line = re.sub('<[^<]+?>', '', line).strip()
+                                filtered_lines.append(filtered_line)
+
+                    info[i][2] += '\n'.join(filtered_lines)
+                except NoSuchElementException:
+                    print(f"ERROR: Obtaining description failed.\n{self.driver.current_url}")
+                    self.driver.quit()
+                    exit(1)
+
             retry = 0
             while True:
                 bk_btn = self.driver.find_element(By.XPATH, '//li[@id="amzn-ss-text-link"]/span')
@@ -94,20 +127,15 @@ class AmazonScraper:
                     self.driver.quit()
                     exit(1)
             info[i][1] = self.driver.find_element(By.XPATH, XPATH_TITLE).text
-            try:
-                ku = self.driver.find_element(By.XPATH, XPATH_KU)
-                if ku:
-                    info[i][2] = '【Kindle Unlimited対象】'
-            except NoSuchElementException:
-                # print('Not included in Kindle Unlimited')
-                pass
-            info[i][2] += self.driver.find_element(By.XPATH, XPATH_DESC).get_attribute("innerText")
+
             for j in range(3):
                 if info[i][j] == '':
-                    print(f"ERROR: info[{i}][{j}] empty")
+                    print(f"ERROR: info[{i}][{j}] empty\n{self.driver.current_url}")
                     self.driver.quit()
                     exit(1)
+
             self.driver.back()
+
         return info
 
 class TwitterClient:
@@ -184,7 +212,7 @@ def main():
 
     for i in reversed(range(3)):
         body = generate_tweet_text(book_info, i)
-        twitter_client.post_tweet(body)
+        # twitter_client.post_tweet(body)
         if i > 0:
             time.sleep(1)
 
