@@ -84,7 +84,7 @@ class AmazonScraper:
         book = self.get_book_element(index)
         book.click()
         print(self.driver.title)
-        time.sleep(5)
+        time.sleep(6)
         self.get_kindle_unlimited_status(index, info)
         self.get_book_description(index, info)
         self.get_book_url_and_title(index, info)
@@ -102,29 +102,29 @@ class AmazonScraper:
 
 
     def get_book_description(self, index, info):
-        try:
-            # Find <span> elements that do NOT contain '※'
-            span_elements = self.driver.find_elements(By.XPATH, XPATH_DESC_DEFAULT)
+        # Find <span> elements that do NOT contain '※'
+        span_elements = self.driver.find_elements(By.XPATH, XPATH_DESC_DEFAULT)
+        if span_elements:
             description = "\n".join([span.text for span in span_elements])
             info[index][2] += description
-        except NoSuchElementException:
-            self.retry_book_description(index, info)
+        else:
+            info[index][2] += self.retry_book_description(index, info)
 
 
     def retry_book_description(self, index, info):
-        try:
-            print("Retrieving the description: second attempt")
-            info[index][2] += self.get_filtered_description()
-        except NoSuchElementException:
+        print("Retrieving the description: second attempt")
+        span_elements = self.driver.find_elements(By.XPATH, XPATH_DESC_SPAN)
+        if span_elements:
+            return self.get_filtered_description_with_regex(span_elements)
+        else:
             self.exit_with_error(f"ERROR: Obtaining description failed.\n{self.driver.current_url}")
 
 
     # Retrieve all the <span> elements and filter lines starting with '※'
-    def get_filtered_description(self):
-        span_elements = self.driver.find_elements(By.XPATH, XPATH_DESC_SPAN)
+    def get_filtered_description_with_regex(self, span_elements):
         filtered_lines = []
         for span in span_elements:
-            inner_html = span.text
+            inner_html = span.get_attribute('innerHTML')
             lines = inner_html.split('<br>')
             for line in lines:
                 if not re.match(r'^\s*※|^\s*$', line):
@@ -163,7 +163,7 @@ class AmazonScraper:
 
     def verify_book_info(self, index, info):
         for j in range(3):
-            if info[index][j] == '':
+            if not info[index][j]:
                 self.exit_with_error(f"ERROR: info[{index}][{j}] empty\n{self.driver.current_url}")
 
 
