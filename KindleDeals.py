@@ -19,10 +19,10 @@ from api_keys import TwitterApiKeys, AmazonLogin
 
 XPATH_URL = '//textarea[@id="amzn-ss-text-shortlink-textarea"]'
 XPATH_TITLE = '//span[@id="productTitle"]'
-XPATH_DESC_DEFAULT = """//*[@id="bookDescription_feature_div"]/div/div[1]/span[not(contains(text(),'※'))]"""
+XPATH_DESC_DEFAULT = '//*[@id="bookDescription_feature_div"]/div/div[1]/span[not(contains(text(),"※"))]'
 XPATH_DESC_SPAN = '//*[@id="bookDescription_feature_div"]/div/div[1]/span'
 XPATH_KU = '//span[@class="a-size-base a-color-secondary ku-promo-message"]'
-MAX_RETRIES = 10
+MAX_RETRIES = 5
 RETRY_WAIT_TIME = 5
 
 class AmazonScraper:
@@ -51,7 +51,7 @@ class AmazonScraper:
             WebDriverWait(self.driver, 60).until(check_url)
             print("Login successful: ", self.driver.title)
         except TimeoutException:
-            self.exit_with_error("Timed out waiting for URL redirection. Current URL:", self.driver.current_url)
+            self.exit_with_error("Timed out waiting for URL redirection. Current URL:")
 
     def close(self):
         self.driver.quit()
@@ -60,6 +60,8 @@ class AmazonScraper:
     def exit_with_error(self, *args):
         msg = ' '.join(map(str, args))
         print(msg)
+        current_url = self.driver.current_url.split('?', 1)[0]
+        print(current_url)
         self.driver.quit()
         sys.exit(1)
 
@@ -70,7 +72,7 @@ class AmazonScraper:
             book = self.driver.find_element(By.XPATH, xpath)
             return book
         except NoSuchElementException:
-            self.exit_with_error("Failed to locate the Daily Sale element at:", self.driver.current_url)
+            self.exit_with_error("Failed to locate the Daily Sale element at:")
 
 
     def get_book_info(self):
@@ -84,12 +86,12 @@ class AmazonScraper:
         book = self.get_book_element(index)
         book.click()
         print(self.driver.title)
-        time.sleep(6)
+        time.sleep(5)
         self.get_kindle_unlimited_status(index, info)
         self.get_book_description(index, info)
         self.get_book_url_and_title(index, info)
         self.verify_book_info(index, info)
-        self.driver.back()        
+        self.driver.back()
 
 
     def get_kindle_unlimited_status(self, index, info):
@@ -102,22 +104,40 @@ class AmazonScraper:
 
 
     def get_book_description(self, index, info):
-        # Find <span> elements that do NOT contain '※'
-        span_elements = self.driver.find_elements(By.XPATH, XPATH_DESC_DEFAULT)
-        if span_elements:
-            description = "\n".join([span.text for span in span_elements])
-            info[index][2] += description
-        else:
-            info[index][2] += self.retry_book_description(index, info)
+        XPATH_DESC_DIV = '//*[@id="bookDescription_feature_div"]/div/div[1]'
+        retry_count = 0
+        while True:
+            # Find <span> elements that do NOT contain '※'
+            span_elements = self.driver.find_elements(By.XPATH, XPATH_DESC_DEFAULT)
+            if span_elements:
+                description = "\n".join([span.text for span in span_elements])
+                info[index][2] += description
+                print("first method successful")
+                break
+            else:
+                print("The first method failed. Checking the data...")
+                span_elements = self.driver.find_elements(By.XPATH, XPATH_DESC_SPAN)
+                if span_elements:
+                    info[index][2] += self.retry_book_description(span_elements)
+                    break
+                elif retry_count == MAX_RETRIES:
+                    self.exit_with_error(f"ERROR: Obtaining description failed.")
+                else:
+                    div = self.driver.find_element(By.XPATH, XPATH_DESC_DIV)
+                    print("upper div: \n", div.text)
+                    retry_count += 1
+                    print(f"Retrying ({retry_count})")
+                    self.driver.refresh()
+                    time.sleep(RETRY_WAIT_TIME)
 
 
-    def retry_book_description(self, index, info):
-        print("Retrieving the description: second attempt")
-        span_elements = self.driver.find_elements(By.XPATH, XPATH_DESC_SPAN)
-        if span_elements:
-            return self.get_filtered_description_with_regex(span_elements)
-        else:
-            self.exit_with_error(f"ERROR: Obtaining description failed.\n{self.driver.current_url}")
+    def retry_book_description(self, span_elements):
+        print("Retrieving the description: trying the second method")
+        # span_elements = self.driver.find_elements(By.XPATH, XPATH_DESC_SPAN)
+        # if span_elements:
+        return self.get_filtered_description_with_regex(span_elements)
+        # else:
+        #     self.exit_with_error(f"ERROR: Obtaining description failed.")
 
 
     # Retrieve all the <span> elements and filter lines starting with '※'
@@ -157,14 +177,14 @@ class AmazonScraper:
     def close_popover_modal(self):
         close_btn = self.driver.find_element(By.XPATH, '//button[@data-action="a-popover-close"]')
         close_btn.click()
-        print('retrying')
+        print('retrying to get the URL')
         time.sleep(RETRY_WAIT_TIME)
                 
 
     def verify_book_info(self, index, info):
         for j in range(3):
             if not info[index][j]:
-                self.exit_with_error(f"ERROR: info[{index}][{j}] empty\n{self.driver.current_url}")
+                self.exit_with_error(f"ERROR: info[{index}][{j}] empty")
 
 
 class TwitterClient:
