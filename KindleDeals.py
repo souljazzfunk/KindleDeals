@@ -123,13 +123,15 @@ class AmazonScraper:
                 elif retry_count == MAX_RETRIES:
                     self.exit_with_error(f"ERROR: Obtaining description failed.")
                 else:
-                    div = self.driver.find_element(By.XPATH, XPATH_DESC_DIV)
-                    print("upper div: \n", div.text)
-                    retry_count += 1
-                    print(f"Retrying ({retry_count})")
-                    self.driver.refresh()
-                    time.sleep(RETRY_WAIT_TIME)
-
+                    try:
+                        div = self.driver.find_element(By.XPATH, XPATH_DESC_DIV)
+                        print("upper div: \n", div.text)
+                    except NoSuchElementException:
+                        retry_count += 1
+                        print(f"Retrying ({retry_count})")
+                        self.driver.refresh()
+                        time.sleep(RETRY_WAIT_TIME)
+    
 
     def retry_book_description(self, span_elements):
         print("Retrieving the description: trying the second method")
