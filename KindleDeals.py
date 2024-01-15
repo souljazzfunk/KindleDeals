@@ -76,8 +76,10 @@ class AmazonScraper:
 
 
     def get_book_info(self):
-        info = [[''] * 3 for _ in range(3)]
-        for i in range(3):
+        xpath_count = f"//h2[contains(text(), 'Kindle日替わりセール')]/following::ol[1]/li"
+        books = self.driver.find_elements(By.XPATH, xpath_count)
+        info = [[''] * 3 for _ in range(len(books))]
+        for i in range(len(books)):
             self.process_book(i, info)
         return info
 
@@ -204,8 +206,8 @@ class TwitterClient:
         except Exception as e:
             print(e)
 
-def generate_tweet_text(book_info, i):
-    header = f"【本日限定のKindleセール {i+1}/3】\n"
+def generate_tweet_text(book_info, i, number_of_books):
+    header = f"【本日限定のKindleセール {i+1}/{number_of_books}】\n"
     book_title = book_info[i][1]
     book_url = book_info[i][0]
     book_desc = book_info[i][2]
@@ -261,9 +263,9 @@ def main():
     twitter_keys = TwitterApiKeys()
     twitter_client = TwitterClient(twitter_keys)
 
-    for i in reversed(range(3)):
-        body = generate_tweet_text(book_info, i)
-        twitter_client.post_tweet(body)
+    for i in reversed(range(len(book_info))):
+        body = generate_tweet_text(book_info, i, len(book_info))
+        # twitter_client.post_tweet(body)
         if i > 0:
             time.sleep(1)
 
