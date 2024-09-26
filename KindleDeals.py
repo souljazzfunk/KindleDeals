@@ -123,7 +123,7 @@ class AmazonScraper:
                     info[index][2] += self.retry_book_description(span_elements)
                     break
                 elif retry_count == MAX_RETRIES:
-                    self.exit_with_error(f"ERROR: Obtaining description failed.")
+                    self.exit_with_error(f"ERROR: Obtaining description failed.\n{XPATH_DESC_DEFAULT}")
                 else:
                     try:
                         div = self.driver.find_element(By.XPATH, XPATH_DESC_DIV)
@@ -165,7 +165,7 @@ class AmazonScraper:
     def get_book_url(self, index, info):
         retry = 0
         while True:
-            bk_btn = self.driver.find_element(By.XPATH, '//li[@id="amzn-ss-text-link"]/span')
+            bk_btn = self.driver.find_element(By.XPATH, '//span[@id="amzn-ss-text-link"]')
             bk_btn.click()
             time.sleep(1)
             info[index][0] = self.driver.find_element(By.XPATH, XPATH_URL).text
