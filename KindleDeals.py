@@ -68,16 +68,66 @@ class AmazonScraper:
 
     def get_book_element(self, index):
         try:
+            # First try original xpath
             xpath = f"//h2[contains(text(), 'Kindle日替わりセール')]/following::ol[1]/li[{index + 1}]"
             book = self.driver.find_element(By.XPATH, xpath)
             return book
         except NoSuchElementException:
-            self.exit_with_error("Failed to locate the Daily Sale element at:")
+            try:
+                # Try carousel item selector
+                selector = f'div#ebooks-deals-storefront_KindleDailyDealsStrategy bds-carousel-item:nth-child({index + 1})'
+                book = self.driver.find_element(By.CSS_SELECTOR, selector)
+                return book
+            except NoSuchElementException:
+                self.exit_with_error("Failed to locate the Daily Sale element using both methods at:")
 
 
     def get_book_info(self):
+        # First try the original method
         xpath_count = f"//h2[contains(text(), 'Kindle日替わりセール')]/following::ol[1]/li"
         books = self.driver.find_elements(By.XPATH, xpath_count)
+        print(f"Found {len(books)} books in the Kindle daily deals section")
+        
+        # If no books found, try the alternative method
+        if len(books) == 0:
+            print("No books found in traditional section. Trying carousel items...")
+            try:
+                carousel_items = self.driver.find_elements(
+                    By.CSS_SELECTOR, 
+                    'div#ebooks-deals-storefront_KindleDailyDealsStrategy bds-carousel-item'
+                )
+                print(f"Found {len(carousel_items)} carousel items")
+                books = carousel_items
+                
+                if len(books) == 0:
+                    print("No carousel items found. Taking debug actions...")
+                    # Original debug actions
+                    section_header = self.driver.find_elements(By.XPATH, "//h2[contains(text(), 'Kindle日替わりセール')]")
+                    print(f"Found {len(section_header)} section headers matching 'Kindle日替わりセール'")
+                    
+                    self.driver.save_screenshot("amazon_page.png")
+                    print("Saved screenshot as amazon_page.png")
+                    
+                    print(f"Current page title: {self.driver.title}")
+                    
+                    sections = self.driver.find_elements(By.XPATH, "//h2")
+                    print("Available section headers:")
+                    for section in sections:
+                        print(f"  - {section.text}")
+                    
+                    # Additional debug info for carousel
+                    carousel = self.driver.find_elements(
+                        By.CSS_SELECTOR, 
+                        'div#ebooks-deals-storefront_KindleDailyDealsStrategy'
+                    )
+                    print(f"Found {len(carousel)} carousel containers")
+                    if len(carousel) > 0:
+                        print("Carousel container HTML:")
+                        print(carousel[0].get_attribute('innerHTML'))
+            
+            except NoSuchElementException as e:
+                print(f"Error finding carousel elements: {e}")
+        
         info = [[''] * 3 for _ in range(len(books))]
         for i in range(len(books)):
             self.process_book(i, info)
