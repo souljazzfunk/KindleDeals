@@ -173,7 +173,9 @@ class AmazonScraper:
                     info[index][2] += self.retry_book_description(span_elements)
                     break
                 elif retry_count == MAX_RETRIES:
-                    self.exit_with_error(f"ERROR: Obtaining description failed.\n{XPATH_DESC_DEFAULT}")
+                    print(f"WARNING: Could not obtain description after {MAX_RETRIES} attempts")
+                    info[index][2] = ""
+                    break
                 else:
                     try:
                         div = self.driver.find_element(By.XPATH, XPATH_DESC_DIV)
@@ -236,7 +238,8 @@ class AmazonScraper:
                 
 
     def verify_book_info(self, index, info):
-        for j in range(3):
+        # Only verify URL and title (indices 0 and 1)
+        for j in range(2):
             if not info[index][j]:
                 self.exit_with_error(f"ERROR: info[{index}][{j}] empty")
 
