@@ -36,7 +36,7 @@ class AmazonScraper:
     def login(self, email, password):
         url = 'https://www.amazon.co.jp/hko/deals'
         self.driver.get(url)
-        self.driver.find_element(By.XPATH, '//a[@id="nav-link-accountList"]').click()
+        self.driver.find_element(By.XPATH, '//div[@id="nav-link-accountList"]/a').click()
         self.driver.find_element(By.ID, "ap_email").send_keys(email)
         self.driver.find_element(By.ID, "continue").submit()
         self.driver.find_element(By.ID, "ap_password").send_keys(password)
