@@ -83,51 +83,30 @@ class AmazonScraper:
 
 
     def get_book_info(self):
-        # First try the original method
-        xpath_count = f"//h2[contains(text(), 'Kindle日替わりセール')]/following::ol[1]/li"
-        books = self.driver.find_elements(By.XPATH, xpath_count)
-        print(f"Found {len(books)} books in the Kindle daily deals section")
-        
-        # If no books found, try the alternative method
-        if len(books) == 0:
-            print("No books found in traditional section. Trying carousel items...")
-            try:
-                carousel_items = self.driver.find_elements(
-                    By.CSS_SELECTOR, 
-                    'div#ebooks-deals-storefront_KindleDailyDealsStrategy bds-carousel-item'
-                )
-                print(f"Found {len(carousel_items)} carousel items")
-                books = carousel_items
-                
-                if len(books) == 0:
-                    print("No carousel items found. Taking debug actions...")
-                    # Original debug actions
-                    section_header = self.driver.find_elements(By.XPATH, "//h2[contains(text(), 'Kindle日替わりセール')]")
-                    print(f"Found {len(section_header)} section headers matching 'Kindle日替わりセール'")
-                    
-                    self.driver.save_screenshot("amazon_page.png")
-                    print("Saved screenshot as amazon_page.png")
-                    
-                    print(f"Current page title: {self.driver.title}")
-                    
-                    sections = self.driver.find_elements(By.XPATH, "//h2")
-                    print("Available section headers:")
-                    for section in sections:
-                        print(f"  - {section.text}")
-                    
-                    # Additional debug info for carousel
-                    carousel = self.driver.find_elements(
-                        By.CSS_SELECTOR, 
-                        'div#ebooks-deals-storefront_KindleDailyDealsStrategy'
-                    )
-                    print(f"Found {len(carousel)} carousel containers")
-                    if len(carousel) > 0:
-                        print("Carousel container HTML:")
-                        print(carousel[0].get_attribute('innerHTML'))
+        try:
+            carousel_items = self.driver.find_elements(
+                By.CSS_SELECTOR, 
+                'div#ebooks-deals-storefront_KindleDailyDealsStrategy bds-carousel-item'
+            )
+            print(f"Found {len(carousel_items)} carousel items")
+            books = carousel_items
             
-            except NoSuchElementException as e:
-                print(f"Error finding carousel elements: {e}")
+            if len(books) == 0:
+                print("No carousel items found. Taking debug actions...")
+                # Debug info for carousel
+                carousel = self.driver.find_elements(
+                    By.CSS_SELECTOR, 
+                    'div#ebooks-deals-storefront_KindleDailyDealsStrategy'
+                )
+                print(f"Found {len(carousel)} carousel containers")
+                if len(carousel) > 0:
+                    print("Carousel container HTML:")
+                    print(carousel[0].get_attribute('innerHTML'))
         
+        except NoSuchElementException as e:
+            print(f"Error finding carousel elements: {e}")
+            books = []
+    
         info = [[''] * 3 for _ in range(len(books))]
         for i in range(len(books)):
             self.process_book(i, info)
@@ -136,9 +115,14 @@ class AmazonScraper:
 
     def process_book(self, index, info):
         book = self.get_book_element(index)
+        
+        # Scroll element into view and wait a bit for the animation
+        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", book)
+        time.sleep(1)
+        
         book.click()
         print(self.driver.title)
-        time.sleep(5)
+        time.sleep(3)
         self.get_kindle_unlimited_status(index, info)
         self.get_book_description(index, info)
         self.get_book_url_and_title(index, info)
@@ -159,7 +143,7 @@ class AmazonScraper:
         XPATH_DESC_DIV = '//*[@id="bookDescription_feature_div"]/div/div[1]'
         retry_count = 0
         while True:
-            # Find <span> elements that do NOT contain '※'
+            # First try the original method - finding <span> elements without '※'
             span_elements = self.driver.find_elements(By.XPATH, XPATH_DESC_DEFAULT)
             if span_elements:
                 description = "\n".join([span.text for span in span_elements])
@@ -168,45 +152,41 @@ class AmazonScraper:
                 break
             else:
                 print("The first method failed. Checking the data...")
+                # Try the second method - all span elements
                 span_elements = self.driver.find_elements(By.XPATH, XPATH_DESC_SPAN)
                 if span_elements:
                     info[index][2] += self.retry_book_description(span_elements)
                     break
-                elif retry_count == MAX_RETRIES:
-                    print(f"WARNING: Could not obtain description after {MAX_RETRIES} attempts")
-                    info[index][2] = ""
-                    break
                 else:
+                    # If both methods fail, try the fallback method for the rare case
                     try:
-                        div = self.driver.find_element(By.XPATH, XPATH_DESC_DIV)
-                        print("upper div: \n", div.text)
+                        fallback_span = self.driver.find_element(By.XPATH, '//*[@id="bookDescription_feature_div"]//span')
+                        inner_html = fallback_span.get_attribute('innerHTML')
+                        if '<br' in inner_html:  # Only use this method if we detect <br> tags
+                            description = re.sub(r'<br\s*/?>', '\n', inner_html)
+                            description = re.sub(r'<[^>]+>', '', description)
+                            description = re.sub(r'\n\s*\n', '\n', description.strip())
+                            info[index][2] += description
+                            print("fallback method successful")
+                            break
+
                     except NoSuchElementException:
+                        pass
+
+                    if retry_count == MAX_RETRIES:
+                        print(f"WARNING: Could not obtain description after {MAX_RETRIES} attempts")
+                        info[index][2] = ""
+                        break
+                    else:
+                        try:
+                            div = self.driver.find_element(By.XPATH, XPATH_DESC_DIV)
+                            print("upper div: \n", div.text)
+                        except NoSuchElementException:
+                            pass
                         retry_count += 1
                         print(f"Retrying ({retry_count})")
                         self.driver.refresh()
                         time.sleep(RETRY_WAIT_TIME)
-    
-
-    def retry_book_description(self, span_elements):
-        print("Retrieving the description: trying the second method")
-        # span_elements = self.driver.find_elements(By.XPATH, XPATH_DESC_SPAN)
-        # if span_elements:
-        return self.get_filtered_description_with_regex(span_elements)
-        # else:
-        #     self.exit_with_error(f"ERROR: Obtaining description failed.")
-
-
-    # Retrieve all the <span> elements and filter lines starting with '※'
-    def get_filtered_description_with_regex(self, span_elements):
-        filtered_lines = []
-        for span in span_elements:
-            inner_html = span.get_attribute('innerHTML')
-            lines = inner_html.split('<br>')
-            for line in lines:
-                if not re.match(r'^\s*※|^\s*$', line):
-                    filtered_line = re.sub('<[^<]+?>', '', line).strip()
-                    filtered_lines.append(filtered_line)
-        return '\n'.join(filtered_lines)
 
 
     def get_book_url_and_title(self, index, info):
@@ -238,6 +218,10 @@ class AmazonScraper:
                 
 
     def verify_book_info(self, index, info):
+        # Skip verification if the book was marked as skipped
+        if info[index][0] == 'Skipped due to page load error':
+            return
+            
         # Only verify URL and title (indices 0 and 1)
         for j in range(2):
             if not info[index][j]:

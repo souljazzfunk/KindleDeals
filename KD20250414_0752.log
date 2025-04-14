@@ -1,0 +1,58 @@
+Login successful:  Kindle本 セール＆キャンペーン
+Found 0 books in the Kindle daily deals section
+No books found in traditional section. Trying carousel items...
+Found 3 carousel items
+Amazon.co.jp: 世界のエリートが学んでいるＭＢＡ必読書５０冊を１冊にまとめてみた eBook : 永井孝尚: 本
+first method successful
+Amazon.co.jp: 女の国会 (幻冬舎単行本) 電子書籍: 新川帆立: Kindleストア
+first method successful
+Kindle本 セール＆キャンペーン
+The first method failed. Checking the data...
+Retrying (1)
+The first method failed. Checking the data...
+Retrying (2)
+The first method failed. Checking the data...
+Retrying (3)
+The first method failed. Checking the data...
+Retrying (4)
+The first method failed. Checking the data...
+Retrying (5)
+The first method failed. Checking the data...
+WARNING: Could not obtain description after 5 attempts
+Traceback (most recent call last):
+  File "/Users/otchy/Documents/GitHub.nosync/Python/_production/KindleDeals/KindleDeals.py", line 326, in <module>
+    main()
+  File "/Users/otchy/Documents/GitHub.nosync/Python/_production/KindleDeals/KindleDeals.py", line 312, in main
+    book_info = scraper.get_book_info()
+  File "/Users/otchy/Documents/GitHub.nosync/Python/_production/KindleDeals/KindleDeals.py", line 133, in get_book_info
+    self.process_book(i, info)
+  File "/Users/otchy/Documents/GitHub.nosync/Python/_production/KindleDeals/KindleDeals.py", line 144, in process_book
+    self.get_book_url_and_title(index, info)
+  File "/Users/otchy/Documents/GitHub.nosync/Python/_production/KindleDeals/KindleDeals.py", line 214, in get_book_url_and_title
+    info[index][1] = self.driver.find_element(By.XPATH, XPATH_TITLE).text
+  File "/Users/otchy/Documents/GitHub.nosync/Python/.venv/lib/python3.9/site-packages/selenium/webdriver/remote/webdriver.py", line 748, in find_element
+    return self.execute(Command.FIND_ELEMENT, {"using": by, "value": value})["value"]
+  File "/Users/otchy/Documents/GitHub.nosync/Python/.venv/lib/python3.9/site-packages/selenium/webdriver/remote/webdriver.py", line 354, in execute
+    self.error_handler.check_response(response)
+  File "/Users/otchy/Documents/GitHub.nosync/Python/.venv/lib/python3.9/site-packages/selenium/webdriver/remote/errorhandler.py", line 229, in check_response
+    raise exception_class(message, screen, stacktrace)
+selenium.common.exceptions.NoSuchElementException: Message: no such element: Unable to locate element: {"method":"xpath","selector":"//span[@id="productTitle"]"}
+  (Session info: chrome=135.0.7049.85); For documentation on this error, please visit: https://www.selenium.dev/documentation/webdriver/troubleshooting/errors#no-such-element-exception
+Stacktrace:
+0   chromedriver                        0x000000010104adec cxxbridge1$str$ptr + 2817040
+1   chromedriver                        0x0000000101043088 cxxbridge1$str$ptr + 2784940
+2   chromedriver                        0x0000000100b8a8d8 cxxbridge1$string$len + 93028
+3   chromedriver                        0x0000000100bd16a0 cxxbridge1$string$len + 383276
+4   chromedriver                        0x0000000100c127b8 cxxbridge1$string$len + 649796
+5   chromedriver                        0x0000000100bc5a80 cxxbridge1$string$len + 335116
+6   chromedriver                        0x000000010100fc74 cxxbridge1$str$ptr + 2575000
+7   chromedriver                        0x0000000101012f40 cxxbridge1$str$ptr + 2588004
+8   chromedriver                        0x0000000100fef9fc cxxbridge1$str$ptr + 2443296
+9   chromedriver                        0x00000001010137bc cxxbridge1$str$ptr + 2590176
+10  chromedriver                        0x0000000100fe0af0 cxxbridge1$str$ptr + 2382100
+11  chromedriver                        0x00000001010339a0 cxxbridge1$str$ptr + 2721732
+12  chromedriver                        0x0000000101033b2c cxxbridge1$str$ptr + 2722128
+13  chromedriver                        0x0000000101042cd4 cxxbridge1$str$ptr + 2783992
+14  libsystem_pthread.dylib             0x0000000184af6f94 _pthread_start + 136
+15  libsystem_pthread.dylib             0x0000000184af1d34 thread_start + 8
+
