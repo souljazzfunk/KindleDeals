@@ -36,11 +36,36 @@ class AmazonScraper:
     def login(self, email, password):
         url = 'https://www.amazon.co.jp/hko/deals'
         self.driver.get(url)
-        self.driver.find_element(By.XPATH, '//div[@id="nav-link-accountList"]/a').click()
-        self.driver.find_element(By.ID, "ap_email").send_keys(email)
-        self.driver.find_element(By.ID, "continue").submit()
-        self.driver.find_element(By.ID, "ap_password").send_keys(password)
-        self.driver.find_element(By.ID, "signInSubmit").submit()
+        
+        # Wait for and click the account link
+        account_link = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, '//div[@id="nav-link-accountList"]/a'))
+        )
+        account_link.click()
+        
+        # Wait for and fill in email
+        email_field = WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.ID, "ap_email"))
+        )
+        email_field.send_keys(email)
+        
+        # Wait for and click continue
+        continue_button = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable((By.ID, "continue"))
+        )
+        continue_button.click()
+        
+        # Wait for and fill in password
+        password_field = WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.ID, "ap_password"))
+        )
+        password_field.send_keys(password)
+        
+        # Wait for and click sign in
+        sign_in_button = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable((By.ID, "signInSubmit"))
+        )
+        sign_in_button.click()
 
         def check_url(driver):
             current_url = urlparse(driver.current_url)
