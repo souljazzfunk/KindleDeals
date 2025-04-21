@@ -35,48 +35,76 @@ class AmazonScraper:
 
     def login(self, email, password):
         url = 'https://www.amazon.co.jp/hko/deals'
+        print("Loading Amazon page...")
         self.driver.get(url)
         
-        # Wait for and click the account link
-        account_link = WebDriverWait(self.driver, 10).until(
-            EC.element_to_be_clickable((By.XPATH, '//div[@id="nav-link-accountList"]/a'))
-        )
-        account_link.click()
+        # Wait for the page to load completely
+        time.sleep(5)  # Initial wait for page load
         
-        # Wait for and fill in email
-        email_field = WebDriverWait(self.driver, 10).until(
-            EC.presence_of_element_located((By.ID, "ap_email"))
-        )
-        email_field.send_keys(email)
-        
-        # Wait for and click continue
-        continue_button = WebDriverWait(self.driver, 10).until(
-            EC.element_to_be_clickable((By.ID, "continue"))
-        )
-        continue_button.click()
-        
-        # Wait for and fill in password
-        password_field = WebDriverWait(self.driver, 10).until(
-            EC.presence_of_element_located((By.ID, "ap_password"))
-        )
-        password_field.send_keys(password)
-        
-        # Wait for and click sign in
-        sign_in_button = WebDriverWait(self.driver, 10).until(
-            EC.element_to_be_clickable((By.ID, "signInSubmit"))
-        )
-        sign_in_button.click()
-
-        def check_url(driver):
-            current_url = urlparse(driver.current_url)
-            base_current_url = f"{current_url.scheme}://{current_url.netloc}{current_url.path}"
-            return base_current_url == url
-
         try:
-            WebDriverWait(self.driver, 60).until(check_url)
-            print("Login successful: ", self.driver.title)
-        except TimeoutException:
-            self.exit_with_error("Timed out waiting for URL redirection. Current URL:")
+            print("Looking for account link...")
+            # Wait for and click the account link
+            account_link = WebDriverWait(self.driver, 20).until(
+                EC.element_to_be_clickable((By.XPATH, '//div[@id="nav-link-accountList"]/a'))
+            )
+            account_link.click()
+            print("Clicked account link")
+            
+            # Wait for the login page to load
+            time.sleep(3)
+            
+            print("Looking for email field...")
+            # Wait for and fill in email
+            email_field = WebDriverWait(self.driver, 20).until(
+                EC.presence_of_element_located((By.ID, "ap_email"))
+            )
+            email_field.send_keys(email)
+            print("Filled email field")
+            
+            print("Looking for continue button...")
+            # Wait for and click continue
+            continue_button = WebDriverWait(self.driver, 20).until(
+                EC.element_to_be_clickable((By.ID, "continue"))
+            )
+            continue_button.click()
+            print("Clicked continue button")
+            
+            # Wait for the password page to load
+            time.sleep(3)
+            
+            print("Looking for password field...")
+            # Wait for and fill in password
+            password_field = WebDriverWait(self.driver, 20).until(
+                EC.presence_of_element_located((By.ID, "ap_password"))
+            )
+            password_field.send_keys(password)
+            print("Filled password field")
+            
+            print("Looking for sign in button...")
+            # Wait for and click sign in
+            sign_in_button = WebDriverWait(self.driver, 20).until(
+                EC.element_to_be_clickable((By.ID, "signInSubmit"))
+            )
+            sign_in_button.click()
+            print("Clicked sign in button")
+
+            def check_url(driver):
+                current_url = urlparse(driver.current_url)
+                base_current_url = f"{current_url.scheme}://{current_url.netloc}{current_url.path}"
+                return base_current_url == url
+
+            try:
+                WebDriverWait(self.driver, 60).until(check_url)
+                print("Login successful: ", self.driver.title)
+            except TimeoutException:
+                self.exit_with_error("Timed out waiting for URL redirection. Current URL:", self.driver.current_url)
+                
+        except TimeoutException as e:
+            print("Current page source:", self.driver.page_source)
+            self.exit_with_error("Timeout during login process:", str(e))
+        except Exception as e:
+            print("Current page source:", self.driver.page_source)
+            self.exit_with_error("Unexpected error during login:", str(e))
 
     def close(self):
         self.driver.quit()
