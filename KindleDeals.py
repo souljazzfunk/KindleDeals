@@ -34,77 +34,50 @@ class AmazonScraper:
         self.driver = webdriver.Chrome(service=Service(ChromeDriverManager().install(), log_path="chromedriver.log"), options=options)
 
     def login(self, email, password):
-        url = 'https://www.amazon.co.jp/hko/deals'
-        print("Loading Amazon page...")
+        # url = "https://www.amazon.co.jp/hko/deals"
+        url = "https://www.amazon.co.jp/kindle-dbs/browse?metadata=storeType=ebooks&widgetId=ebooks-deals-storefront_KindleDailyDealsStrategy&sourceType=recs"
         self.driver.get(url)
         
-        # Wait for the page to load completely
-        time.sleep(5)  # Initial wait for page load
+        # Wait for and click the account link
+        account_link = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, '//div[@id="nav-link-accountList"]/a'))
+        )
+        account_link.click()
         
-        try:
-            print("Looking for account link...")
-            # Wait for and click the account link
-            account_link = WebDriverWait(self.driver, 20).until(
-                EC.element_to_be_clickable((By.XPATH, '//div[@id="nav-link-accountList"]/a'))
-            )
-            account_link.click()
-            print("Clicked account link")
-            
-            # Wait for the login page to load
-            time.sleep(3)
-            
-            print("Looking for email field...")
-            # Wait for and fill in email
-            email_field = WebDriverWait(self.driver, 20).until(
-                EC.presence_of_element_located((By.ID, "ap_email"))
-            )
-            email_field.send_keys(email)
-            print("Filled email field")
-            
-            print("Looking for continue button...")
-            # Wait for and click continue
-            continue_button = WebDriverWait(self.driver, 20).until(
-                EC.element_to_be_clickable((By.ID, "continue"))
-            )
-            continue_button.click()
-            print("Clicked continue button")
-            
-            # Wait for the password page to load
-            time.sleep(3)
-            
-            print("Looking for password field...")
-            # Wait for and fill in password
-            password_field = WebDriverWait(self.driver, 20).until(
-                EC.presence_of_element_located((By.ID, "ap_password"))
-            )
-            password_field.send_keys(password)
-            print("Filled password field")
-            
-            print("Looking for sign in button...")
-            # Wait for and click sign in
-            sign_in_button = WebDriverWait(self.driver, 20).until(
-                EC.element_to_be_clickable((By.ID, "signInSubmit"))
-            )
-            sign_in_button.click()
-            print("Clicked sign in button")
+        # Wait for and fill in email
+        email_field = WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='email'][name='email']"))
+        )
+        email_field.send_keys(email)
+        
+        # Wait for and click continue
+        continue_button = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable((By.ID, "continue"))
+        )
+        continue_button.click()
+        
+        # Wait for and fill in password
+        password_field = WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.ID, "ap_password"))
+        )
+        password_field.send_keys(password)
+        
+        # Wait for and click sign in
+        sign_in_button = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable((By.ID, "signInSubmit"))
+        )
+        sign_in_button.click()
 
-            def check_url(driver):
-                current_url = urlparse(driver.current_url)
-                base_current_url = f"{current_url.scheme}://{current_url.netloc}{current_url.path}"
-                return base_current_url == url
+        # def check_url(driver):
+        #     current_url = urlparse(driver.current_url)
+        #     base_current_url = f"{current_url.scheme}://{current_url.netloc}{current_url.path}"
+        #     return base_current_url == url
 
-            try:
-                WebDriverWait(self.driver, 60).until(check_url)
-                print("Login successful: ", self.driver.title)
-            except TimeoutException:
-                self.exit_with_error("Timed out waiting for URL redirection. Current URL:", self.driver.current_url)
-                
-        except TimeoutException as e:
-            print("Current page source:", self.driver.page_source)
-            self.exit_with_error("Timeout during login process:", str(e))
-        except Exception as e:
-            print("Current page source:", self.driver.page_source)
-            self.exit_with_error("Unexpected error during login:", str(e))
+        # try:
+        #     WebDriverWait(self.driver, 60).until(check_url)
+        #     print("Login successful: ", self.driver.title)
+        # except TimeoutException:
+        #     self.exit_with_error("Timed out waiting for URL redirection. Current URL:")
 
     def close(self):
         self.driver.quit()
@@ -121,49 +94,39 @@ class AmazonScraper:
 
     def get_book_element(self, index):
         try:
-            # First try original xpath
-            xpath = f"//h2[contains(text(), 'Kindle日替わりセール')]/following::ol[1]/li[{index + 1}]"
-            book = self.driver.find_element(By.XPATH, xpath)
-            return book
+            # Find books in the grid view
+            books = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                'div.a-column.a-span4.a-spacing-extra-large'
+            )
+            if index < len(books):
+                return books[index]
+            else:
+                self.exit_with_error(f"Book index {index} out of range. Found {len(books)} books.")
         except NoSuchElementException:
-            try:
-                # Try carousel item selector
-                selector = f'div#ebooks-deals-storefront_KindleDailyDealsStrategy bds-carousel-item:nth-child({index + 1})'
-                book = self.driver.find_element(By.CSS_SELECTOR, selector)
-                return book
-            except NoSuchElementException:
-                self.exit_with_error("Failed to locate the Daily Sale element using both methods at:")
+            self.exit_with_error("Failed to locate the book elements in grid view")
 
 
     def get_book_info(self):
         try:
-            carousel_items = self.driver.find_elements(
-                By.CSS_SELECTOR, 
-                'div#ebooks-deals-storefront_KindleDailyDealsStrategy bds-carousel-item'
-            )
-            print(f"Found {len(carousel_items)} carousel items")
-            books = carousel_items
+            # Wait for the grid view to load
+            time.sleep(5)
             
-            if len(books) == 0:
-                print("No carousel items found. Taking debug actions...")
-                # Debug info for carousel
-                carousel = self.driver.find_elements(
-                    By.CSS_SELECTOR, 
-                    'div#ebooks-deals-storefront_KindleDailyDealsStrategy'
-                )
-                print(f"Found {len(carousel)} carousel containers")
-                if len(carousel) > 0:
-                    print("Carousel container HTML:")
-                    print(carousel[0].get_attribute('innerHTML'))
-        
+            # Find all book elements in the grid view
+            books = self.driver.find_elements(
+                By.CSS_SELECTOR,
+                'div.a-column.a-span4.a-spacing-extra-large'
+            )
+            print(f"Found {len(books)} books in grid view")
+            
+            info = [[''] * 3 for _ in range(len(books))]
+            for i in range(len(books)):
+                self.process_book(i, info)
+            return info
+            
         except NoSuchElementException as e:
-            print(f"Error finding carousel elements: {e}")
-            books = []
-    
-        info = [[''] * 3 for _ in range(len(books))]
-        for i in range(len(books)):
-            self.process_book(i, info)
-        return info
+            print(f"Error finding book elements: {e}")
+            return []
 
 
     def process_book(self, index, info):
@@ -201,17 +164,18 @@ class AmazonScraper:
             if span_elements:
                 description = "\n".join([span.text for span in span_elements])
                 info[index][2] += description
-                print("first method successful")
+                print("Description found successfully")
                 break
             else:
-                print("The first method failed. Checking the data...")
+                print("First method failed. Trying alternative method...")
                 # Try the second method - all span elements
                 span_elements = self.driver.find_elements(By.XPATH, XPATH_DESC_SPAN)
                 if span_elements:
-                    info[index][2] += self.retry_book_description(span_elements)
+                    description = "\n".join([span.text for span in span_elements])
+                    info[index][2] += description
                     break
                 else:
-                    # If both methods fail, try the fallback method for the rare case
+                    # If both methods fail, try the fallback method
                     try:
                         fallback_span = self.driver.find_element(By.XPATH, '//*[@id="bookDescription_feature_div"]//span')
                         inner_html = fallback_span.get_attribute('innerHTML')
@@ -220,9 +184,7 @@ class AmazonScraper:
                             description = re.sub(r'<[^>]+>', '', description)
                             description = re.sub(r'\n\s*\n', '\n', description.strip())
                             info[index][2] += description
-                            print("fallback method successful")
                             break
-
                     except NoSuchElementException:
                         pass
 
@@ -231,11 +193,6 @@ class AmazonScraper:
                         info[index][2] = ""
                         break
                     else:
-                        try:
-                            div = self.driver.find_element(By.XPATH, XPATH_DESC_DIV)
-                            print("upper div: \n", div.text)
-                        except NoSuchElementException:
-                            pass
                         retry_count += 1
                         print(f"Retrying ({retry_count})")
                         self.driver.refresh()
