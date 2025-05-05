@@ -44,19 +44,22 @@ class AmazonScraper:
                 EC.element_to_be_clickable((By.XPATH, '//div[@id="nav-link-accountList"]/a'))
             )
             account_link.click()
-            
+            print("account link clicked")
+
             # Wait for and fill in email
             email_field = WebDriverWait(self.driver, 10).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='email'][name='email']"))
             )
             email_field.clear()
             email_field.send_keys(email)
+            print("id typed")
             
             # Wait for and click continue
             continue_button = WebDriverWait(self.driver, 10).until(
                 EC.element_to_be_clickable((By.ID, "continue"))
             )
             continue_button.click()
+            print("continue button clicked")
             
             # Wait for and fill in password - ensure it's clickable, not just present
             password_field = WebDriverWait(self.driver, 10).until(
@@ -64,12 +67,14 @@ class AmazonScraper:
             )
             password_field.clear()
             password_field.send_keys(password)
+            print("password typed")
             
             # Wait for and click sign in
             sign_in_button = WebDriverWait(self.driver, 10).until(
                 EC.element_to_be_clickable((By.ID, "signInSubmit"))
             )
             sign_in_button.click()
+            print("signin button clicked")
             
             # Give time for login to complete
             time.sleep(1)
