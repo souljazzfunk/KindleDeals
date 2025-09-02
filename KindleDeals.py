@@ -6,6 +6,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
 from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import StaleElementReferenceException
 from webdriver_manager.chrome import ChromeDriverManager
 from urllib.parse import urlparse
 import time
@@ -99,19 +100,31 @@ class AmazonScraper:
         sys.exit(1)
 
 
-    def get_book_element(self, index):
-        try:
-            # Find books in the grid view
-            books = self.driver.find_elements(
-                By.CSS_SELECTOR,
-                'div.a-column.a-span4.a-spacing-extra-large'
-            )
-            if index < len(books):
-                return books[index]
-            else:
-                self.exit_with_error(f"Book index {index} out of range. Found {len(books)} books.")
-        except NoSuchElementException:
-            self.exit_with_error("Failed to locate the book elements in grid view")
+    def get_book_element(self, index, max_retries=3):
+        for attempt in range(max_retries):
+            try:
+                # Wait for books to be present in the grid view
+                WebDriverWait(self.driver, 10).until(
+                    EC.presence_of_all_elements_located((By.CSS_SELECTOR, 'div.a-column.a-span4.a-spacing-extra-large'))
+                )
+                
+                # Find books in the grid view
+                books = self.driver.find_elements(
+                    By.CSS_SELECTOR,
+                    'div.a-column.a-span4.a-spacing-extra-large'
+                )
+                
+                if index < len(books):
+                    return books[index]
+                else:
+                    self.exit_with_error(f"Book index {index} out of range. Found {len(books)} books.")
+                    
+            except (NoSuchElementException, StaleElementReferenceException, TimeoutException) as e:
+                if attempt < max_retries - 1:
+                    print(f"Attempt {attempt + 1} failed: {e}. Retrying...")
+                    time.sleep(2)
+                else:
+                    self.exit_with_error(f"Failed to locate the book elements after {max_retries} attempts: {e}")
 
 
     def get_book_info(self):
@@ -137,20 +150,39 @@ class AmazonScraper:
 
 
     def process_book(self, index, info):
-        book = self.get_book_element(index)
-        
-        # Scroll element into view and wait a bit for the animation
-        self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", book)
-        time.sleep(1)
-        
-        book.click()
-        print(self.driver.title)
-        time.sleep(3)
-        self.get_kindle_unlimited_status(index, info)
-        self.get_book_description(index, info)
-        self.get_book_url_and_title(index, info)
-        self.verify_book_info(index, info)
-        self.driver.back()
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Re-find the book element each time to avoid stale reference
+                book = self.get_book_element(index)
+                
+                # Scroll element into view and wait a bit for the animation
+                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", book)
+                time.sleep(1)
+                
+                # Re-find the book element after scrolling to ensure it's still valid
+                book = self.get_book_element(index)
+                book.click()
+                print(self.driver.title)
+                time.sleep(3)
+                self.get_kindle_unlimited_status(index, info)
+                self.get_book_description(index, info)
+                self.get_book_url_and_title(index, info)
+                self.verify_book_info(index, info)
+                self.driver.back()
+                
+                # Wait for the page to fully load after going back
+                time.sleep(2)
+                break  # Success, exit retry loop
+                
+            except StaleElementReferenceException as e:
+                if attempt < max_retries - 1:
+                    print(f"Stale element error on attempt {attempt + 1}: {e}. Retrying...")
+                    time.sleep(2)
+                else:
+                    self.exit_with_error(f"Failed to process book {index} after {max_retries} attempts due to stale elements")
+            except Exception as e:
+                self.exit_with_error(f"Error processing book {index}: {e}")
 
 
     def get_kindle_unlimited_status(self, index, info):
