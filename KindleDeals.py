@@ -286,11 +286,24 @@ class TwitterClient:
             access_token_secret=api_keys.access_token_secret
         )
 
-    def post_tweet(self, text):
-        try:
-            self.client.create_tweet(text=text)
-        except Exception as e:
-            print(e)
+    def post_tweet(self, text, max_retries=5):
+        base_wait_time = 1
+        for attempt in range(max_retries):
+            try:
+                self.client.create_tweet(text=text)
+                print(f"Tweet posted successfully")
+                return True
+            except tweepy.errors.TooManyRequests as e:
+                if attempt < max_retries - 1:
+                    wait_time = base_wait_time * (2 ** attempt)
+                    print(f"Rate limit hit (429). Waiting {wait_time} seconds before retry {attempt + 1}/{max_retries}...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"Failed to post tweet after {max_retries} attempts due to rate limiting: {e}")
+                    return False
+            except Exception as e:
+                print(f"Error posting tweet: {e}")
+                return False
 
 def generate_tweet_text(book_info, i, number_of_books):
     header = f"【本日限定のKindleセール {i+1}/{number_of_books}】\n"
