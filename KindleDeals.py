@@ -286,20 +286,20 @@ class TwitterClient:
             access_token_secret=api_keys.access_token_secret
         )
 
-    def post_tweet(self, text, max_retries=5):
-        base_wait_time = 1
-        for attempt in range(max_retries):
+    def post_tweet(self, text, max_attempts=3):
+        base_wait_time = 60
+        for attempt in range(max_attempts):
             try:
                 self.client.create_tweet(text=text)
                 print(f"Tweet posted successfully")
                 return True
             except tweepy.errors.TooManyRequests as e:
-                if attempt < max_retries - 1:
+                if attempt < max_attempts - 1:
                     wait_time = base_wait_time * (2 ** attempt)
-                    print(f"Rate limit hit (429). Waiting {wait_time} seconds before retry {attempt + 1}/{max_retries}...")
+                    print(f"Rate limit hit (429). Waiting {wait_time} seconds before retry {attempt + 1}/{max_attempts}...")
                     time.sleep(wait_time)
                 else:
-                    print(f"Failed to post tweet after {max_retries} attempts due to rate limiting: {e}")
+                    print(f"Failed to post tweet after {max_attempts} attempts due to rate limiting: {e}")
                     return False
             except Exception as e:
                 print(f"Error posting tweet: {e}")
