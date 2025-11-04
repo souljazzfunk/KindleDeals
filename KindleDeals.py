@@ -131,19 +131,24 @@ class AmazonScraper:
         try:
             # Wait for the grid view to load
             time.sleep(5)
-            
+
             # Find all book elements in the grid view
             books = self.driver.find_elements(
                 By.CSS_SELECTOR,
                 'div.a-column.a-span4.a-spacing-extra-large'
             )
             print(f"Found {len(books)} books in grid view")
-            
-            info = [[''] * 3 for _ in range(len(books))]
-            for i in range(len(books)):
+
+            # Limit to first 10 books
+            num_books_to_process = min(len(books), 10)
+            if len(books) > 10:
+                print(f"Processing only first {num_books_to_process} books")
+
+            info = [[''] * 3 for _ in range(num_books_to_process)]
+            for i in range(num_books_to_process):
                 self.process_book(i, info)
             return info
-            
+
         except NoSuchElementException as e:
             print(f"Error finding book elements: {e}")
             return []
