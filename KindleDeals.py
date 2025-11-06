@@ -139,9 +139,9 @@ class AmazonScraper:
             )
             print(f"Found {len(books)} books in grid view")
 
-            # Limit to first 10 books
-            num_books_to_process = min(len(books), 10)
-            if len(books) > 10:
+            # Limit to first 5 books
+            num_books_to_process = min(len(books), 5)
+            if len(books) > 5:
                 print(f"Processing only first {num_books_to_process} books")
 
             info = [[''] * 3 for _ in range(num_books_to_process)]
