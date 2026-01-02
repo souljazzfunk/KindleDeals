@@ -25,6 +25,7 @@ XPATH_DESC_SPAN = '//*[@id="bookDescription_feature_div"]/div/div[1]/span'
 XPATH_KU = '//span[@class="a-size-base a-color-secondary ku-promo-message"]'
 MAX_RETRIES = 5
 RETRY_WAIT_TIME = 5
+MAX_BOOKS_TO_PROCESS = 3
 
 class AmazonScraper:
     def __init__(self):
@@ -139,9 +140,9 @@ class AmazonScraper:
             )
             print(f"Found {len(books)} books in grid view")
 
-            # Limit to first 5 books
-            num_books_to_process = min(len(books), 5)
-            if len(books) > 5:
+            # Limit to first N books
+            num_books_to_process = min(len(books), MAX_BOOKS_TO_PROCESS)
+            if len(books) > MAX_BOOKS_TO_PROCESS:
                 print(f"Processing only first {num_books_to_process} books")
 
             info = [[''] * 3 for _ in range(num_books_to_process)]
