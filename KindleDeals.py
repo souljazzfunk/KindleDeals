@@ -42,45 +42,52 @@ class AmazonScraper:
         
         try:
             # Wait for and click the account link
-            account_link = WebDriverWait(self.driver, 10).until(
+            account_link = WebDriverWait(self.driver, 30).until(
                 EC.element_to_be_clickable((By.XPATH, '//div[@id="nav-link-accountList"]/a'))
             )
             account_link.click()
             print("account link clicked")
 
             # Wait for and fill in email
-            email_field = WebDriverWait(self.driver, 10).until(
+            email_field = WebDriverWait(self.driver, 30).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='email'][name='email']"))
             )
             email_field.clear()
             email_field.send_keys(email)
             print("id typed")
-            
+
             # Wait for and click continue
-            continue_button = WebDriverWait(self.driver, 10).until(
+            continue_button = WebDriverWait(self.driver, 30).until(
                 EC.element_to_be_clickable((By.ID, "continue"))
             )
             continue_button.click()
             print("continue button clicked")
-            
+
             # Wait for and fill in password - ensure it's clickable, not just present
-            password_field = WebDriverWait(self.driver, 10).until(
+            # Longer timeout to allow for OTP challenge
+            password_field = WebDriverWait(self.driver, 120).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='password'][name='password']"))
             )
             password_field.clear()
             password_field.send_keys(password)
             print("password typed")
-            
-            # Wait for and click sign in
-            sign_in_button = WebDriverWait(self.driver, 10).until(
-                EC.element_to_be_clickable((By.ID, "signInSubmit"))
-            )
-            sign_in_button.click()
-            print("signin button clicked")
-            
-            # Give time for login to complete
-            time.sleep(1)
-            
+
+            # Check if already logged in (e.g., after password change auto-login)
+            # or wait for the sign-in button
+            for _ in range(120):
+                # Check for the sign-in button first
+                sign_in_buttons = self.driver.find_elements(By.ID, "signInSubmit")
+                if sign_in_buttons:
+                    sign_in_buttons[0].click()
+                    print("signin button clicked")
+                    time.sleep(5)
+                    break
+                # If we're on the deals/browse page, login is already complete
+                if 'kindle-dbs/browse' in self.driver.current_url:
+                    print("Already logged in (redirected to deals page)")
+                    break
+                time.sleep(1)
+
             print("Login successful: ", self.driver.title)
             
         except TimeoutException as e:
