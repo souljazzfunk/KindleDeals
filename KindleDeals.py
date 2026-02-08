@@ -27,6 +27,28 @@ MAX_RETRIES = 5
 RETRY_WAIT_TIME = 5
 MAX_BOOKS_TO_PROCESS = 3
 
+MANGA_KEYWORDS = ['マンガ', 'まんが', '漫画', 'コミック', 'comic']
+GENRE_PRIORITIES = [
+    ['AI', '人工知能', '機械学習', '深層学習', 'ChatGPT', 'LLM', '生成AI'],
+    ['プログラミング', 'Python', 'エンジニア', 'IT', 'データ', 'アルゴリズム', 'Web', 'クラウド', 'セキュリティ', 'DX', 'コンピュータ'],
+    ['哲学', '思想', '倫理'],
+    ['ノンフィクション', 'ルポ', 'ドキュメント'],
+    ['エッセイ', '随筆', 'コラム'],
+    ['ビジネス', '経営', 'マーケティング', '投資', '経済', '仕事', '起業', 'MBA'],
+    ['料理', 'レシピ', 'グルメ'],
+]
+
+def classify_book_priority(title):
+    title_lower = title.lower()
+    for keyword in MANGA_KEYWORDS:
+        if keyword.lower() in title_lower:
+            return None
+    for priority, keywords in enumerate(GENRE_PRIORITIES):
+        for keyword in keywords:
+            if keyword.lower() in title_lower:
+                return priority
+    return len(GENRE_PRIORITIES)
+
 class AmazonScraper:
     def __init__(self):
         options = Options()
@@ -147,14 +169,30 @@ class AmazonScraper:
             )
             print(f"Found {len(books)} books in grid view")
 
-            # Limit to first N books
-            num_books_to_process = min(len(books), MAX_BOOKS_TO_PROCESS)
-            if len(books) > MAX_BOOKS_TO_PROCESS:
-                print(f"Processing only first {num_books_to_process} books")
+            # Extract titles and classify/prioritize
+            candidates = []
+            for i, book in enumerate(books):
+                try:
+                    title_el = book.find_element(By.CSS_SELECTOR, 'span.browse-text-line')
+                    title = title_el.text.strip()
+                except NoSuchElementException:
+                    title = ""
+                priority = classify_book_priority(title)
+                if priority is None:
+                    print(f"  [{i}] SKIP (manga): {title}")
+                else:
+                    print(f"  [{i}] priority {priority}: {title}")
+                    candidates.append((priority, i, title))
 
-            info = [[''] * 3 for _ in range(num_books_to_process)]
-            for i in range(num_books_to_process):
-                self.process_book(i, info)
+            # Sort by priority, then by original order
+            candidates.sort(key=lambda x: (x[0], x[1]))
+            selected = candidates[:MAX_BOOKS_TO_PROCESS]
+            print(f"Selected {len(selected)} books to process")
+
+            info = [[''] * 3 for _ in range(len(selected))]
+            for info_idx, (priority, grid_idx, title) in enumerate(selected):
+                print(f"Processing [{grid_idx}]: {title}")
+                self.process_book(grid_idx, info, info_idx)
             return info
 
         except NoSuchElementException as e:
@@ -162,40 +200,40 @@ class AmazonScraper:
             return []
 
 
-    def process_book(self, index, info):
+    def process_book(self, grid_idx, info, info_idx):
         max_retries = 3
         for attempt in range(max_retries):
             try:
                 # Re-find the book element each time to avoid stale reference
-                book = self.get_book_element(index)
-                
+                book = self.get_book_element(grid_idx)
+
                 # Scroll element into view and wait a bit for the animation
                 self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", book)
                 time.sleep(1)
-                
+
                 # Re-find the book element after scrolling to ensure it's still valid
-                book = self.get_book_element(index)
+                book = self.get_book_element(grid_idx)
                 book.click()
                 print(self.driver.title)
                 time.sleep(3)
-                self.get_kindle_unlimited_status(index, info)
-                self.get_book_description(index, info)
-                self.get_book_url_and_title(index, info)
-                self.verify_book_info(index, info)
+                self.get_kindle_unlimited_status(info_idx, info)
+                self.get_book_description(info_idx, info)
+                self.get_book_url_and_title(info_idx, info)
+                self.verify_book_info(info_idx, info)
                 self.driver.back()
-                
+
                 # Wait for the page to fully load after going back
                 time.sleep(2)
                 break  # Success, exit retry loop
-                
+
             except StaleElementReferenceException as e:
                 if attempt < max_retries - 1:
                     print(f"Stale element error on attempt {attempt + 1}: {e}. Retrying...")
                     time.sleep(2)
                 else:
-                    self.exit_with_error(f"Failed to process book {index} after {max_retries} attempts due to stale elements")
+                    self.exit_with_error(f"Failed to process book {grid_idx} after {max_retries} attempts due to stale elements")
             except Exception as e:
-                self.exit_with_error(f"Error processing book {index}: {e}")
+                self.exit_with_error(f"Error processing book {grid_idx}: {e}")
 
 
     def get_kindle_unlimited_status(self, index, info):
@@ -226,8 +264,19 @@ class AmazonScraper:
                     description = "\n".join([span.text for span in span_elements])
                     info[index][2] += description
                     break
+
+                # Try the third method - p>span structure, filtering ※ disclaimers
+                p_span_elements = self.driver.find_elements(
+                    By.XPATH, '//*[@id="bookDescription_feature_div"]/div/div[1]/p/span[not(contains(text(),"※"))]'
+                )
+                if p_span_elements:
+                    description = "\n".join([span.text for span in p_span_elements])
+                    info[index][2] += description
+                    print("Description found via p>span method")
+                    break
+
                 else:
-                    # If both methods fail, try the fallback method
+                    # If all methods fail, try the innerHTML fallback
                     try:
                         fallback_span = self.driver.find_element(By.XPATH, '//*[@id="bookDescription_feature_div"]//span')
                         inner_html = fallback_span.get_attribute('innerHTML')
@@ -377,7 +426,7 @@ def main():
 
     for i in reversed(range(len(book_info))):
         body = generate_tweet_text(book_info, i, len(book_info))
-        twitter_client.post_tweet(body)
+        # twitter_client.post_tweet(body)
         if i > 0:
             time.sleep(1)
 
