@@ -426,7 +426,7 @@ def main():
 
     for i in reversed(range(len(book_info))):
         body = generate_tweet_text(book_info, i, len(book_info))
-        # twitter_client.post_tweet(body)
+        twitter_client.post_tweet(body)
         if i > 0:
             time.sleep(1)
 
