@@ -14,9 +14,21 @@ import tweepy
 import sys
 import os
 import re
+import google.generativeai as genai
+from dotenv import load_dotenv
+
+load_dotenv()
 
 sys.path.append(os.environ.get('API_KEYS'))
 from api_keys import TwitterApiKeys, AmazonLogin
+
+_gemini_model = None
+
+def init_gemini(api_key):
+    global _gemini_model
+    genai.configure(api_key=api_key)
+    # _gemini_model = genai.GenerativeModel("gemini-2.5-flash-lite")
+    _gemini_model = genai.GenerativeModel("gemini-3-flash-preview")
 
 XPATH_URL = '//textarea[@id="amzn-ss-text-shortlink-textarea"]'
 XPATH_TITLE = '//span[@id="productTitle"]'
@@ -29,12 +41,12 @@ MAX_BOOKS_TO_PROCESS = 3
 
 MANGA_KEYWORDS = ['マンガ', 'まんが', '漫画', 'コミック', 'comic']
 GENRE_PRIORITIES = [
-    ['AI', '人工知能', '機械学習', '深層学習', 'ChatGPT', 'LLM', '生成AI'],
-    ['プログラミング', 'Python', 'エンジニア', 'IT', 'データ', 'アルゴリズム', 'Web', 'クラウド', 'セキュリティ', 'DX', 'コンピュータ'],
+    ['AI', '人工知能', '機械学習', '深層学習', 'ChatGPT', 'LLM', '生成AI', 'プログラミング', 'Python', 'エンジニア', 'IT', 'データ', 'Web', 'クラウド', 'セキュリティ'],
+    ['音楽', 'ミュージック', 'ジャズ', '楽器', 'ピアノ', 'ギター', 'ドラム'],
+    ['アジア', '中国', '韓国', '台湾', 'インド', '東南アジア', '東アジア'],
     ['哲学', '思想', '倫理'],
     ['ノンフィクション', 'ルポ', 'ドキュメント'],
     ['エッセイ', '随筆', 'コラム'],
-    ['ビジネス', '経営', 'マーケティング', '投資', '経済', '仕事', '起業', 'MBA'],
     ['料理', 'レシピ', 'グルメ'],
 ]
 
@@ -48,6 +60,44 @@ def classify_book_priority(title):
             if keyword.lower() in title_lower:
                 return priority
     return len(GENRE_PRIORITIES)
+
+def classify_books_batch(titles):
+    if not titles:
+        return []
+    if _gemini_model is not None:
+        numbered = '\n'.join(f"{i+1}. {t}" for i, t in enumerate(titles))
+        prompt = f"""以下の書籍タイトルのジャンルをそれぞれ分類し、ジャンル番号をカンマ区切りで返してください。
+
+書籍タイトル一覧:
+{numbered}
+
+ジャンル:
+0: AI・テクノロジー（AI・機械学習・プログラミング・IT・エンジニアリング・データサイエンス・コンピュータ）
+1: 音楽（音楽理論・楽器・音楽史）
+2: アジア（中国・韓国・台湾・東南アジア・インド・日本などのアジア諸国の文化・歴史・社会・旅行ガイド。欧米など非アジア地域は含まない）
+3: 哲学・思想・倫理・宗教
+4: ノンフィクション・ルポルタージュ・ドキュメンタリー・歴史・地政学・社会問題
+5: エッセイ・随筆・コラム（著者の体験や意見を綴った文章。小説・フィクション・物語は含まない）
+6: 料理・レシピ・グルメ・献立
+7: その他（小説・フィクション・ミステリー・ビジネス書・自己啓発・旅行ガイド（アジア以外）・育児・趣味など）
+
+分類の注意:
+- 文庫・ミステリー・恋愛・SFなど小説・物語は必ず7
+- 「地球の歩き方」はアジア・中東諸国（タイ・中国・韓国・台湾・インド・トルコなど）なら2、欧米（ローマ・フランス・ドイツなど）なら7
+- ビジネス書・自己啓発・コミュニケーション本は7
+- アジアの歴史・文化を扱う本は2（哲学・思想ではなくアジアを優先）
+
+タイトルの順番に対応した数字のみをカンマ区切りで返してください（例: 5,3,7,0）"""
+        try:
+            response = _gemini_model.generate_content(prompt)
+            parts = response.text.strip().split(',')
+            results = [int(p.strip()) for p in parts]
+            if len(results) == len(titles) and all(0 <= r <= 7 for r in results):
+                return results
+            print(f"WARNING: Gemini batch response malformed ({response.text.strip()!r}), falling back to keyword matching")
+        except Exception as e:
+            print(f"WARNING: Gemini batch classification failed, falling back to keyword matching: {e}")
+    return [classify_book_priority(title) for title in titles]
 
 class AmazonScraper:
     def __init__(self):
@@ -159,28 +209,37 @@ class AmazonScraper:
 
     def get_book_info(self):
         try:
-            # Wait for the grid view to load
             time.sleep(5)
-
-            # Find all book elements in the grid view
             books = self.driver.find_elements(
                 By.CSS_SELECTOR,
                 'div.a-column.a-span4.a-spacing-extra-large'
             )
             print(f"Found {len(books)} books in grid view")
 
-            # Extract titles and classify/prioritize
-            candidates = []
+            # Phase 1: collect all titles and detect manga
+            entries = []
             for i, book in enumerate(books):
                 try:
                     title_el = book.find_element(By.CSS_SELECTOR, 'span.browse-text-line')
                     title = title_el.text.strip()
                 except NoSuchElementException:
                     title = ""
-                priority = classify_book_priority(title)
-                if priority is None:
+                title_lower = title.lower()
+                is_manga = any(kw.lower() in title_lower for kw in MANGA_KEYWORDS)
+                entries.append((i, title, is_manga))
+
+            # Phase 2: batch classify non-manga titles with one Gemini call
+            non_manga_titles = [title for _, title, is_manga in entries if not is_manga]
+            priorities = classify_books_batch(non_manga_titles)
+
+            # Phase 3: build candidates list
+            priority_iter = iter(priorities)
+            candidates = []
+            for i, title, is_manga in entries:
+                if is_manga:
                     print(f"  [{i}] SKIP (manga): {title}")
                 else:
+                    priority = next(priority_iter)
                     print(f"  [{i}] priority {priority}: {title}")
                     candidates.append((priority, i, title))
 
@@ -309,7 +368,12 @@ class AmazonScraper:
         retry = 0
         while True:
             bk_btn = self.driver.find_element(By.XPATH, '//span[@id="amzn-ss-text-link"]')
-            bk_btn.click()
+            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", bk_btn)
+            time.sleep(0.5)
+            try:
+                bk_btn.click()
+            except Exception:
+                self.driver.execute_script("arguments[0].click();", bk_btn)
             time.sleep(1)
             info[index][0] = self.driver.find_element(By.XPATH, XPATH_URL).text
             if info[index][0] != '':
@@ -412,6 +476,13 @@ def trim_text_for_tweet(text):
     return trimmed_text
 
 def main():
+    # Gemini
+    gemini_api_key = os.environ.get('GEMINI_API_KEY')
+    if gemini_api_key:
+        init_gemini(gemini_api_key)
+    else:
+        print("WARNING: GEMINI_API_KEY not set, using keyword matching fallback")
+
     # Amazon Scraper
     amazon_credentials = AmazonLogin()
     scraper = AmazonScraper()
@@ -426,7 +497,7 @@ def main():
 
     for i in reversed(range(len(book_info))):
         body = generate_tweet_text(book_info, i, len(book_info))
-        twitter_client.post_tweet(body)
+        # twitter_client.post_tweet(body)
         if i > 0:
             time.sleep(1)
 
