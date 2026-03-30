@@ -14,21 +14,19 @@ import tweepy
 import sys
 import os
 import re
-import google.generativeai as genai
+from google import genai
 from dotenv import load_dotenv
 
 load_dotenv()
 
-sys.path.append(os.environ.get('API_KEYS'))
-from api_keys import TwitterApiKeys, AmazonLogin
-
-_gemini_model = None
+_gemini_client = None
+_gemini_model_name = None
 
 def init_gemini(api_key):
-    global _gemini_model
-    genai.configure(api_key=api_key)
-    # _gemini_model = genai.GenerativeModel("gemini-2.5-flash-lite")
-    _gemini_model = genai.GenerativeModel("gemini-3-flash-preview")
+    global _gemini_client, _gemini_model_name
+    _gemini_client = genai.Client(api_key=api_key)
+    # _gemini_model_name = "gemini-2.5-flash-lite"
+    _gemini_model_name = "gemini-2.5-flash-preview-04-17"
 
 XPATH_URL = '//textarea[@id="amzn-ss-text-shortlink-textarea"]'
 XPATH_TITLE = '//span[@id="productTitle"]'
@@ -65,7 +63,7 @@ def classify_book_priority(title):
 def classify_books_batch(titles):
     if not titles:
         return []
-    if _gemini_model is not None:
+    if _gemini_client is not None:
         numbered = '\n'.join(f"{i+1}. {t}" for i, t in enumerate(titles))
         prompt = f"""以下の書籍タイトルのジャンルをそれぞれ分類し、ジャンル番号をカンマ区切りで返してください。
 
@@ -92,7 +90,7 @@ def classify_books_batch(titles):
 
 タイトルの順番に対応した数字のみをカンマ区切りで返してください（例: 5,3,7,0）"""
         try:
-            response = _gemini_model.generate_content(prompt)
+            response = _gemini_client.models.generate_content(model=_gemini_model_name, contents=prompt)
             parts = response.text.strip().split(',')
             results = [int(p.strip()) for p in parts]
             if len(results) == len(titles) and all(0 <= r <= 8 for r in results):
@@ -140,11 +138,18 @@ class AmazonScraper:
 
             # Wait for and fill in password - ensure it's clickable, not just present
             # Longer timeout to allow for OTP challenge
-            password_field = WebDriverWait(self.driver, 120).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='password'][name='password']"))
-            )
-            password_field.clear()
-            password_field.send_keys(password)
+            for _pw_attempt in range(3):
+                try:
+                    password_field = WebDriverWait(self.driver, 120).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, "input[type='password'][name='password']"))
+                    )
+                    password_field.clear()
+                    password_field.send_keys(password)
+                    break
+                except StaleElementReferenceException:
+                    if _pw_attempt == 2:
+                        raise
+                    time.sleep(1)
             print("password typed")
 
             # Check if already logged in (e.g., after password change auto-login)
@@ -407,12 +412,12 @@ class AmazonScraper:
 
 
 class TwitterClient:
-    def __init__(self, api_keys):
+    def __init__(self):
         self.client = tweepy.Client(
-            consumer_key=api_keys.consumer_key,
-            consumer_secret=api_keys.consumer_secret,
-            access_token=api_keys.access_token,
-            access_token_secret=api_keys.access_token_secret
+            consumer_key=os.environ.get('TWITTER_CONSUMER_KEY'),
+            consumer_secret=os.environ.get('TWITTER_CONSUMER_SECRET'),
+            access_token=os.environ.get('TWITTER_ACCESS_TOKEN'),
+            access_token_secret=os.environ.get('TWITTER_ACCESS_TOKEN_SECRET'),
         )
 
     def post_tweet(self, text, max_attempts=3):
@@ -487,16 +492,14 @@ def main():
         print("WARNING: GEMINI_API_KEY not set, using keyword matching fallback")
 
     # Amazon Scraper
-    amazon_credentials = AmazonLogin()
     scraper = AmazonScraper()
-    scraper.login(amazon_credentials.user_name, amazon_credentials.passwd)
+    scraper.login(os.environ.get('AMAZON_USER_NAME'), os.environ.get('AMAZON_PASSWORD'))
 
     book_info = scraper.get_book_info()
     scraper.close()
 
     # Twitter Client
-    twitter_keys = TwitterApiKeys()
-    twitter_client = TwitterClient(twitter_keys)
+    twitter_client = TwitterClient()
 
     for i in reversed(range(len(book_info))):
         body = generate_tweet_text(book_info, i, len(book_info))
